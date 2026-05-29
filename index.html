@@ -2,32 +2,78 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mapa Mundial - Ubicaciones</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>H4CK3R M4P - Conexiones</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/topojson-client@3"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: system-ui, sans-serif; }
-#map { height: 100vh; width: 100%; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body { font-family: 'Share Tech Mono', monospace; background: #050805; display: flex; flex-direction: row; color: #00ff41; }
+#map-wrap { flex: 1; position: relative; min-width: 0; }
+#map-wrap .leaflet-container { background: #050805; }
 #info {
-position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-background: rgba(0,0,0,.75); color: #fff; padding: 10px 20px;
-border-radius: 8px; z-index: 1000; font-size: 14px;
-text-align: center; pointer-events: none; backdrop-filter: blur(4px);
+position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+background: rgba(0,8,0,.88); color: #00ff41; padding: 4px 12px;
+border: 1px solid #00ff4133; font-size: 11px; white-space: nowrap;
+text-shadow: 0 0 6px #00ff4166; pointer-events: none; z-index: 1000;
 }
-.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+#sidebar {
+width: 240px; flex-shrink: 0; height: 100vh; background: rgba(0,5,0,.95);
+color: #00ff41; padding: 14px; overflow-y: auto; border-left: 1px solid #00ff4122; transition: transform .25s;
+}
+#sidebar::before { content: '> H4CK3R M4P v3.0'; display: block; font-size: 12px; margin-bottom: 2px; text-shadow: 0 0 8px #00ff4188; }
+#sidebar .sub { font-size: 10px; color: #00ff4166; margin-bottom: 10px; }
+#sidebar h2 { font-size: 10px; color: #00ff4188; margin: 12px 0 5px; letter-spacing: 2px; text-transform: uppercase; font-weight: 400; }
+#sidebar h2::before { content: '# '; }
+.pais { display: flex; align-items: center; padding: 2px 0; border-bottom: 1px solid #00ff4111; font-size: 10px; }
+.pais .bar { height: 3px; margin-left: 5px; flex-shrink: 0; }
+.pais .count { margin-left: auto; font-size: 10px; text-shadow: 0 0 4px #00ff4188; }
+.ip-item { padding: 2px 0; font-size: 10px; border-bottom: 1px solid #00ff4111; display: flex; justify-content: space-between; }
+.ip-item .ip { color: #00ff41; }
+.ip-item .meta { color: #00ff4166; }
+.cursor::after { content: '\u258C'; animation: blink 1s step-end infinite; color: #00ff41; }
+@keyframes blink { 50% { opacity: 0; } }
+#menu-btn {
+display: none; position: fixed; top: 8px; right: 8px; z-index: 2000;
+background: rgba(0,8,0,.88); color: #00ff41; border: 1px solid #00ff4133;
+font-size: 20px; width: 34px; height: 34px; cursor: pointer;
+font-family: inherit; padding: 0; line-height: 34px; text-align: center;
+}
+#overlay { display: none; position: fixed; inset: 0; z-index: 1499; }
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #sidebar { position: fixed; top: 0; right: 0; z-index: 1500; transform: translateX(100%); border-left: 1px solid #00ff4133; }
+  #sidebar.open { transform: translateX(0); }
+  #menu-btn { display: block; }
+  #overlay.open { display: block; }
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #050805; }
+::-webkit-scrollbar-thumb { background: #00ff4133; }
 </style>
 </head>
 <body>
-<div id="info"><span class="loading"></span> Obteniendo ubicación...</div>
-<div id="map"></div>
+<div id="map-wrap">
+  <div id="info">> INITIALIZING...</div>
+  <div id="map" style="width:100%;height:100%"></div>
+</div>
+<button id="menu-btn">☰</button>
+<div id="overlay"></div>
+<div id="sidebar">
+  <div class="sub">> NODES: <span id="total">0</span></div>
+  <h2>Países</h2>
+  <div id="country-list"></div>
+  <h2>Nodos</h2>
+  <div id="ip-list"></div>
+  <div class="cursor"></div>
+</div>
 
 <script>
-// --- Config Firebase (REEMPLAZAR con tus credenciales) ---
 const firebaseConfig = {
 apiKey: "AIzaSyACGSnLsOq3MRjGOIaIXGvnx7zTLv85ZOM",
 authDomain: "app-store-88307.firebaseapp.com",
@@ -38,145 +84,90 @@ messagingSenderId: "221250728360",
 appId: "1:221250728360:web:5d1882a43423c37f532d9d",
 measurementId: "G-3D0YSYYBCG"
 };
-
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const ref = db.ref('ubicaciones');
+const ref = firebase.database().ref('ubicaciones');
 
-// --- Detect device ---
-function detectDevice() {
-const ua = navigator.userAgent;
-const mobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|Windows Phone/i.test(ua);
-return mobile ? 'mobile' : 'pc';
-}
+const map = L.map('map', { preferCanvas: true, zoomControl: false, attributionControl: false }).setView([20, 0], 2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18, minZoom: 2 }).addTo(map);
 
-// --- Custom icons ---
-const icons = {
-mobile: L.divIcon({
-html: `<div style="width:20px;height:20px;background:#e74c3c;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
-iconSize: [20, 20],
-iconAnchor: [10, 10],
-popupAnchor: [0, -10],
-className: ''
-}),
-pc: L.divIcon({
-html: `<div style="width:20px;height:20px;background:#3498db;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
-iconSize: [20, 20],
-iconAnchor: [10, 10],
-popupAnchor: [0, -10],
-className: ''
-})
-};
+let countryCounts = {}, pointsData = {};
+let geoLayer;
 
-// --- Init map ---
-const map = L.map('map').setView([20, 0], 2);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-attribution: '&copy; OpenStreetMap contributors',
-maxZoom: 18
-}).addTo(map);
-
-const markers = {};
-
-// --- Load existing markers ---
-ref.on('child_added', (snap) => {
-const d = snap.val();
-const id = snap.key;
-const latlng = [d.lat, d.lng];
-const device = d.device || 'pc';
-const marker = L.marker(latlng, { icon: icons[device] })
-.bindPopup(`<b>${d.device === 'mobile' ? '📱 Móvil' : '💻 PC'}</b><br>${d.city || 'Ubicación desconocida'}<br><small>${d.time || ''}</small>`)
-.addTo(map);
-markers[id] = marker;
-});
-
-ref.on('child_removed', (snap) => {
-if (markers[snap.key]) {
-map.removeLayer(markers[snap.key]);
-delete markers[snap.key];
-}
-});
-
-// --- Get & save location ---
-function saveLocation(pos) {
-const { latitude: lat, longitude: lng } = pos.coords;
-const device = detectDevice();
-const time = new Date().toLocaleString();
-
-const info = document.getElementById('info');
-
-// Reverse geocode with OpenStreetMap Nominatim
-fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
-.then(r => r.json())
-.then(data => {
-const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || 'Desconocida';
-info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · ${city} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-
-// Save to Firebase
-ref.push({
-lat,
-lng,
-device,
-city,
-time,
-timestamp: firebase.database.ServerValue.TIMESTAMP
-});
-})
-.catch(() => {
-info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-ref.push({
-lat,
-lng,
-device,
-time,
-timestamp: firebase.database.ServerValue.TIMESTAMP
-});
-});
-
-// Center map on user
-map.setView([lat, lng], 5);
-}
-
-function handleError(err) {
-document.getElementById('info').textContent = `Error: no se pudo obtener la ubicación (${err.message})`;
-}
-
-// --- Get location via IP first ---
-fetch('https://ip-api.com/json/')
+fetch('https://unpkg.com/world-atlas@2/countries-110m.json')
   .then(r => r.json())
-  .then(data => {
-    if (data.status === 'success') {
-      const { lat, lon: lng, city } = data;
-      const device = detectDevice();
-      const time = new Date().toLocaleString();
-      const info = document.getElementById('info');
-
-      info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · ${city} (${lat.toFixed(4)}, ${lng.toFixed(4)}) (IP)`;
-
-      ref.push({
-        lat,
-        lng,
-        device,
-        city,
-        time,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
-      });
-
-      map.setView([lat, lng], 10);
-
-      // Try GPS for better accuracy
-      navigator.geolocation.getCurrentPosition(saveLocation, () => {}, {
-        enableHighAccuracy: true,
-        timeout: 8000
-      });
-    }
-  })
-  .catch(() => {
-    // Fallback to GPS
-    navigator.geolocation.getCurrentPosition(saveLocation, handleError, {
-      enableHighAccuracy: true,
-      timeout: 10000
-    });
+  .then(topo => {
+    const data = topojson.feature(topo, topo.objects.countries);
+    geoLayer = L.geoJSON(data, {
+      style: () => ({ fillColor: '#00ff41', fillOpacity: 0, color: '#00ff4111', weight: 0.3, opacity: 0.2 }),
+      onEachFeature: (f, layer) => {
+        layer.on('mouseover', () => {
+          const c = countryCounts[f.properties.name] || 0;
+          layer.setStyle({ fillOpacity: c ? 0.15 + Math.min(c/8,1)*0.35 : 0, color: c ? '#00ff41' : '#00ff4111', weight: c ? 1 : 0.3, opacity: c ? 0.8 : 0.2 });
+          if (c) layer.bindTooltip(`> ${f.properties.name} :: ${c} NODE${c!==1?'S':''}`, { className: 'hack-tip' }).openTooltip();
+        });
+        layer.on('mouseout', () => {
+          const c = countryCounts[f.properties.name] || 0;
+          layer.setStyle({ fillOpacity: c ? 0.15 + Math.min(c/8,1)*0.35 : 0, color: c ? '#00ff41' : '#00ff4111', weight: c ? 1 : 0.3, opacity: c ? 0.6 : 0.2 });
+        });
+      }
+    }).addTo(map);
+    applyCounts();
+    document.getElementById('info').textContent = '> SYSTEM READY';
   });
+
+const tipStyle = document.createElement('style');
+tipStyle.textContent = '.hack-tip { background: rgba(0,8,0,.92) !important; color: #00ff41 !important; border: 1px solid #00ff4133 !important; font-family: "Share Tech Mono",monospace !important; font-size: 11px !important; box-shadow: none !important; border-radius: 0 !important; } .hack-tip::before { border-top-color: rgba(0,8,0,.92) !important; }';
+document.head.appendChild(tipStyle);
+
+function applyCounts() {
+  if (!geoLayer) return;
+  geoLayer.eachLayer(layer => {
+    const c = countryCounts[layer.feature.properties.name] || 0;
+    layer.setStyle({ fillOpacity: c ? 0.15 + Math.min(c/8,1)*0.35 : 0, color: c ? '#00ff41' : '#00ff4111', weight: c ? 1 : 0.3, opacity: c ? 0.6 : 0.2 });
+  });
+}
+
+function renderSidebar() {
+  const total = Object.keys(pointsData).length;
+  document.getElementById('total').textContent = total;
+  const sorted = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+  const max = sorted.length ? sorted[0][1] : 1;
+  document.getElementById('country-list').innerHTML = sorted.map(([n, c]) =>
+    `<div class="pais"><span>${n}</span><span class="bar" style="width:${(c/max)*100}px;background:#00ff41;opacity:${0.2+c/max*0.6}"></span><span class="count">${c}</span></div>`
+  ).join('');
+  document.getElementById('ip-list').innerHTML = Object.values(pointsData).sort((a,b) => (b.time||'').localeCompare(a.time||'')).map(d =>
+    `<div class="ip-item"><span class="ip">${d.ip||'???'}</span><span class="meta">${d.device==='mobile'?'[M]':'[P]'} ${d.city||''}</span></div>`
+  ).join('');
+}
+
+ref.on('child_added', snap => {
+  const d = snap.val();
+  pointsData[snap.key] = d;
+  const c = d.country || 'Desconocido';
+  countryCounts[c] = (countryCounts[c] || 0) + 1;
+  applyCounts(); renderSidebar();
+});
+
+// --- Hamburger toggle (mobile) ---
+document.getElementById('menu-btn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+});
+document.getElementById('overlay').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+});
+
+ref.on('child_removed', snap => {
+  const d = pointsData[snap.key];
+  if (d) {
+    const c = d.country || 'Desconocido';
+    if (countryCounts[c]) countryCounts[c]--;
+    if (countryCounts[c] <= 0) delete countryCounts[c];
+    delete pointsData[snap.key];
+    applyCounts(); renderSidebar();
+  }
+});
 </script>
 </body>
 </html>

