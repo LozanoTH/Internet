@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa Mundial - Ubicaciones</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; }
+#map { height: 100vh; width: 100%; }
+#info {
+position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+background: rgba(0,0,0,.75); color: #fff; padding: 10px 20px;
+border-radius: 8px; z-index: 1000; font-size: 14px;
+text-align: center; pointer-events: none; backdrop-filter: blur(4px);
+}
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="info"><span class="loading"></span> Obteniendo ubicación...</div>
+<div id="map"></div>
+
+<script>
+// --- Config Firebase (REEMPLAZAR con tus credenciales) ---
+const firebaseConfig = {
+apiKey: "AIzaSyACGSnLsOq3MRjGOIaIXGvnx7zTLv85ZOM",
+authDomain: "app-store-88307.firebaseapp.com",
+databaseURL: "https://app-store-88307-default-rtdb.firebaseio.com",
+projectId: "app-store-88307",
+storageBucket: "app-store-88307.firebasestorage.app",
+messagingSenderId: "221250728360",
+appId: "1:221250728360:web:5d1882a43423c37f532d9d",
+measurementId: "G-3D0YSYYBCG"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const ref = db.ref('ubicaciones');
+
+// --- Detect device ---
+function detectDevice() {
+const ua = navigator.userAgent;
+const mobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|Windows Phone/i.test(ua);
+return mobile ? 'mobile' : 'pc';
+}
+
+// --- Custom icons ---
+const icons = {
+mobile: L.divIcon({
+html: `<div style="width:20px;height:20px;background:#e74c3c;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
+iconSize: [20, 20],
+iconAnchor: [10, 10],
+popupAnchor: [0, -10],
+className: ''
+}),
+pc: L.divIcon({
+html: `<div style="width:20px;height:20px;background:#3498db;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
+iconSize: [20, 20],
+iconAnchor: [10, 10],
+popupAnchor: [0, -10],
+className: ''
+})
+};
+
+// --- Init map ---
+const map = L.map('map').setView([20, 0], 2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+attribution: '&copy; OpenStreetMap contributors',
+maxZoom: 18
+}).addTo(map);
+
+const markers = {};
+
+// --- Load existing markers ---
+ref.on('child_added', (snap) => {
+const d = snap.val();
+const id = snap.key;
+const latlng = [d.lat, d.lng];
+const device = d.device || 'pc';
+const marker = L.marker(latlng, { icon: icons[device] })
+.bindPopup(`<b>${d.device === 'mobile' ? '📱 Móvil' : '💻 PC'}</b><br>${d.city || 'Ubicación desconocida'}<br><small>${d.time || ''}</small>`)
+.addTo(map);
+markers[id] = marker;
+});
+
+ref.on('child_removed', (snap) => {
+if (markers[snap.key]) {
+map.removeLayer(markers[snap.key]);
+delete markers[snap.key];
+}
+});
+
+// --- Get & save location ---
+function saveLocation(pos) {
+const { latitude: lat, longitude: lng } = pos.coords;
+const device = detectDevice();
+const time = new Date().toLocaleString();
+
+const info = document.getElementById('info');
+
+// Reverse geocode with OpenStreetMap Nominatim
+fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+.then(r => r.json())
+.then(data => {
+const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || 'Desconocida';
+info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · ${city} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+// Save to Firebase
+ref.push({
+lat,
+lng,
+device,
+city,
+time,
+timestamp: firebase.database.ServerValue.TIMESTAMP
+});
+})
+.catch(() => {
+info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+ref.push({
+lat,
+lng,
+device,
+time,
+timestamp: firebase.database.ServerValue.TIMESTAMP
+});
+});
+
+// Center map on user
+map.setView([lat, lng], 5);
+}
+
+function handleError(err) {
+document.getElementById('info').textContent = `Error: no se pudo obtener la ubicación (${err.message})`;
+}
+
+// --- Get location via IP first ---
+fetch('https://ip-api.com/json/')
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === 'success') {
+      const { lat, lon: lng, city } = data;
+      const device = detectDevice();
+      const time = new Date().toLocaleString();
+      const info = document.getElementById('info');
+
+      info.textContent = `${device === 'mobile' ? '📱 Móvil' : '💻 PC'} · ${city} (${lat.toFixed(4)}, ${lng.toFixed(4)}) (IP)`;
+
+      ref.push({
+        lat,
+        lng,
+        device,
+        city,
+        time,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+      });
+
+      map.setView([lat, lng], 10);
+
+      // Try GPS for better accuracy
+      navigator.geolocation.getCurrentPosition(saveLocation, () => {}, {
+        enableHighAccuracy: true,
+        timeout: 8000
+      });
+    }
+  })
+  .catch(() => {
+    // Fallback to GPS
+    navigator.geolocation.getCurrentPosition(saveLocation, handleError, {
+      enableHighAccuracy: true,
+      timeout: 10000
+    });
+  });
+</script>
+</body>
+</html>
